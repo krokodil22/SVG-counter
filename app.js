@@ -686,6 +686,41 @@ function downloadBlob(blob, fileName){
   URL.revokeObjectURL(url);
 }
 
+function blobToDataUrl(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('read blob error'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function inlineSvgImages(svgText){
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const svg = doc.querySelector('svg');
+  if (!svg || doc.querySelector('parsererror')) return svgText;
+
+  const images = Array.from(svg.querySelectorAll('image'));
+  await Promise.all(images.map(async (imgEl) => {
+    const href = imgEl.getAttribute('href') || imgEl.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    if (!href || href.startsWith('data:') || href.startsWith('blob:') || href.startsWith('#')) return;
+
+    try{
+      const res = await fetch(href, { mode: 'cors' });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      if (!dataUrl) return;
+      imgEl.setAttribute('href', dataUrl);
+      imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', dataUrl);
+    }catch(_){
+      // Если ресурс недоступен по CORS, оставляем исходный href.
+    }
+  }));
+
+  return new XMLSerializer().serializeToString(svg);
+}
+
 async function exportSelected(type){
   const target = selected[0];
   if (!target || !svgRoot) return;
@@ -696,12 +731,14 @@ async function exportSelected(type){
     return;
   }
 
+  const preparedSvgText = await inlineSvgImages(payload.svgText);
+
   if (type === 'svg'){
-    downloadBlob(new Blob([payload.svgText], { type: 'image/svg+xml;charset=utf-8' }), 'selected-element.svg');
+    downloadBlob(new Blob([preparedSvgText], { type: 'image/svg+xml;charset=utf-8' }), 'selected-element.svg');
     return;
   }
 
-  const svgBlob = new Blob([payload.svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const svgBlob = new Blob([preparedSvgText], { type: 'image/svg+xml;charset=utf-8' });
   const svgUrl = URL.createObjectURL(svgBlob);
 
   const img = new Image();
