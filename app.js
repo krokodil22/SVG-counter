@@ -8,6 +8,8 @@
 
 const fileInput = document.getElementById('fileInput');
 const clearBtn = document.getElementById('clearBtn');
+const downloadSvgBtn = document.getElementById('downloadSvgBtn');
+const downloadPngBtn = document.getElementById('downloadPngBtn');
 
 const dropZone = document.getElementById('dropZone');
 const svgHost = document.getElementById('svgHost');
@@ -43,6 +45,14 @@ dropZone.addEventListener('drop', async (e) => {
   const file = e.dataTransfer?.files?.[0];
   if (!file) return;
   await loadSvgFile(file);
+});
+
+downloadSvgBtn?.addEventListener('click', async () => {
+  await exportSelected('svg');
+});
+
+downloadPngBtn?.addEventListener('click', async () => {
+  await exportSelected('png');
 });
 
 async function loadSvgFile(file){
@@ -589,11 +599,138 @@ function updateColorsUI(){
   strokeWidthText.classList.toggle('muted', !(sw > 0));
 }
 
+
+function updateExportButtons(){
+  const enabled = selected.length >= 1;
+  if (downloadSvgBtn) downloadSvgBtn.disabled = !enabled;
+  if (downloadPngBtn) downloadPngBtn.disabled = !enabled;
+}
+
+function getExportPayload(targetEl){
+  if (!svgRoot || !targetEl) return null;
+
+  targetEl.setAttribute('data-export-target', '1');
+  const keepSet = new Set();
+
+  let parent = targetEl;
+  while (parent && parent !== svgRoot){
+    keepSet.add(parent);
+    parent = parent.parentElement;
+  }
+  keepSet.add(svgRoot);
+
+  targetEl.querySelectorAll('*').forEach((node) => keepSet.add(node));
+  keepSet.forEach((node) => {
+    if (node instanceof Element && node !== svgRoot){
+      node.setAttribute('data-export-keep', '1');
+    }
+  });
+
+  const rawBBox = getTransformedBBoxRoot(targetEl);
+  const strokeWidth = getStrokeWidthRoot(targetEl);
+  const bbox = expandBBox(rawBBox, strokeWidth);
+  const pad = 2;
+
+  const serializer = new XMLSerializer();
+  const cloneDoc = new DOMParser().parseFromString(serializer.serializeToString(svgRoot), 'image/svg+xml');
+
+  targetEl.removeAttribute('data-export-target');
+  keepSet.forEach((node) => {
+    if (node instanceof Element) node.removeAttribute('data-export-keep');
+  });
+
+  const cloneSvg = cloneDoc.querySelector('svg');
+  if (!cloneSvg) return null;
+
+  cloneSvg.querySelectorAll('*').forEach((node) => {
+    if (!(node instanceof SVGElement)) return;
+    const keep = node.getAttribute('data-export-keep') === '1';
+    if (!keep && node instanceof SVGGraphicsElement){
+      node.setAttribute('visibility', 'hidden');
+    }
+    node.removeAttribute('data-export-keep');
+    node.removeAttribute('data-export-target');
+  });
+
+  const safeWidth = Math.max(1, bbox.width + pad * 2);
+  const safeHeight = Math.max(1, bbox.height + pad * 2);
+  const minX = bbox.left - pad;
+  const minY = bbox.top - pad;
+
+  cloneSvg.setAttribute('viewBox', `${minX} ${minY} ${safeWidth} ${safeHeight}`);
+  cloneSvg.setAttribute('width', `${Math.ceil(safeWidth)}`);
+  cloneSvg.setAttribute('height', `${Math.ceil(safeHeight)}`);
+
+  return {
+    svgText: serializer.serializeToString(cloneSvg),
+    width: Math.ceil(safeWidth),
+    height: Math.ceil(safeHeight),
+  };
+}
+
+function downloadBlob(blob, fileName){
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportSelected(type){
+  const target = selected[0];
+  if (!target || !svgRoot) return;
+
+  const payload = getExportPayload(target);
+  if (!payload){
+    alert('Не удалось подготовить экспорт.');
+    return;
+  }
+
+  if (type === 'svg'){
+    downloadBlob(new Blob([payload.svgText], { type: 'image/svg+xml;charset=utf-8' }), 'selected-element.svg');
+    return;
+  }
+
+  const svgBlob = new Blob([payload.svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  const img = new Image();
+  img.decoding = 'async';
+
+  try{
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('image load error'));
+      img.src = svgUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = payload.width;
+    canvas.height = payload.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no canvas context');
+    ctx.drawImage(img, 0, 0, payload.width, payload.height);
+
+    const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!pngBlob) throw new Error('png conversion error');
+
+    downloadBlob(pngBlob, 'selected-element.png');
+  }catch(_){
+    alert('Не удалось экспортировать PNG. Попробуйте скачать SVG.');
+  }finally{
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
 /* -------------------- Главный апдейт -------------------- */
 
 function updateAll(){
   clearOverlay();
   updateColorsUI();
+  updateExportButtons();
   if (!svgRoot) return;
 
   applyFitToHost();
@@ -627,3 +764,4 @@ window.addEventListener('resize', () => { if (svgRoot) updateAll(); }, { passive
 
 updateHintVisibility();
 resetColorsUI();
+updateExportButtons();
