@@ -425,6 +425,28 @@ function addOffsetsToEdges(bGeom){
 }
 
 function addPairDistance(b1, b2){
+  const b1ContainsB2 = b1.left <= b2.left && b1.right >= b2.right && b1.top <= b2.top && b1.bottom >= b2.bottom;
+  const b2ContainsB1 = b2.left <= b1.left && b2.right >= b1.right && b2.top <= b1.top && b2.bottom >= b1.bottom;
+
+  if (b1ContainsB2 || b2ContainsB1){
+    const outer = b1ContainsB2 ? b1 : b2;
+    const inner = outer === b1 ? b2 : b1;
+
+    const yMid = inner.top + inner.height / 2;
+    const xMid = inner.left + inner.width / 2;
+
+    const leftGap = Math.max(0, inner.left - outer.left);
+    const rightGap = Math.max(0, outer.right - inner.right);
+    const topGap = Math.max(0, inner.top - outer.top);
+    const bottomGap = Math.max(0, outer.bottom - inner.bottom);
+
+    addLineSvg(outer.left, yMid, inner.left, yMid, fmtPx(leftGap));
+    addLineSvg(inner.right, yMid, outer.right, yMid, fmtPx(rightGap));
+    addLineSvg(xMid, outer.top, xMid, inner.top, fmtPx(topGap));
+    addLineSvg(xMid, inner.bottom, xMid, outer.bottom, fmtPx(bottomGap));
+    return;
+  }
+
   const separatedX = b1.right < b2.left || b2.right < b1.left;
   const separatedY = b1.bottom < b2.top || b2.bottom < b1.top;
 
