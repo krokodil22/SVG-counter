@@ -49,6 +49,10 @@ async function loadSvgFile(file){
   const text = await file.text();
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'image/svg+xml');
+  if (doc.querySelector('parsererror')){
+    alert('SVG содержит ошибку синтаксиса и не может быть обработан.');
+    return;
+  }
   const svg = doc.querySelector('svg');
   if (!svg){
     alert('Не удалось прочитать SVG. Проверьте файл.');
@@ -122,6 +126,7 @@ function hookSelection(){
     if (!(target instanceof SVGElement)) return;
     if (target === svgRoot) return;
     if (typeof target.getBBox !== 'function') return;
+    if (!canMeasureBBox(target)) return;
 
     const el = /** @type {SVGGraphicsElement} */ (target);
 
@@ -196,6 +201,15 @@ function setOrRemove(el, attr, val){
   else el.setAttribute(attr, val);
 }
 
+function canMeasureBBox(el){
+  try{
+    el.getBBox();
+    return true;
+  }catch(_){
+    return false;
+  }
+}
+
 /* -------------------- Геометрия в координатах SVG root -------------------- */
 
 function getViewBoxInfo(){
@@ -205,10 +219,6 @@ function getViewBoxInfo(){
     return { minX: vb.x, minY: vb.y, width: vb.width, height: vb.height };
   }
   return { minX: 0, minY: 0, width: intrinsic.width, height: intrinsic.height };
-}
-
-function mulPoint(m, x, y){
-  return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
 }
 
 /** bbox без stroke в локальных координатах -> bbox в координатах root (учитывая transform) */
