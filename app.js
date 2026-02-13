@@ -609,63 +609,70 @@ function updateExportButtons(){
 function getExportPayload(targetEl){
   if (!svgRoot || !targetEl) return null;
 
-  targetEl.setAttribute('data-export-target', '1');
-  const keepSet = new Set();
+  const highlighted = selected.filter((el) => restoreMap.has(el));
+  highlighted.forEach((el) => applyHighlight(el, false));
 
-  let parent = targetEl;
-  while (parent && parent !== svgRoot){
-    keepSet.add(parent);
-    parent = parent.parentElement;
+  try{
+    targetEl.setAttribute('data-export-target', '1');
+    const keepSet = new Set();
+
+    let parent = targetEl;
+    while (parent && parent !== svgRoot){
+      keepSet.add(parent);
+      parent = parent.parentElement;
+    }
+    keepSet.add(svgRoot);
+
+    targetEl.querySelectorAll('*').forEach((node) => keepSet.add(node));
+    keepSet.forEach((node) => {
+      if (node instanceof Element && node !== svgRoot){
+        node.setAttribute('data-export-keep', '1');
+      }
+    });
+
+    const rawBBox = getTransformedBBoxRoot(targetEl);
+    const strokeWidth = getStrokeWidthRoot(targetEl);
+    const bbox = expandBBox(rawBBox, strokeWidth);
+    const pad = 2;
+
+    const serializer = new XMLSerializer();
+    const cloneDoc = new DOMParser().parseFromString(serializer.serializeToString(svgRoot), 'image/svg+xml');
+
+    targetEl.removeAttribute('data-export-target');
+    keepSet.forEach((node) => {
+      if (node instanceof Element) node.removeAttribute('data-export-keep');
+    });
+
+    const cloneSvg = cloneDoc.querySelector('svg');
+    if (!cloneSvg) return null;
+
+    cloneSvg.querySelectorAll('*').forEach((node) => {
+      if (!(node instanceof SVGElement)) return;
+      const keep = node.getAttribute('data-export-keep') === '1';
+      if (!keep && node instanceof SVGGraphicsElement){
+        node.setAttribute('visibility', 'hidden');
+      }
+      node.removeAttribute('data-export-keep');
+      node.removeAttribute('data-export-target');
+    });
+
+    const safeWidth = Math.max(1, bbox.width + pad * 2);
+    const safeHeight = Math.max(1, bbox.height + pad * 2);
+    const minX = bbox.left - pad;
+    const minY = bbox.top - pad;
+
+    cloneSvg.setAttribute('viewBox', `${minX} ${minY} ${safeWidth} ${safeHeight}`);
+    cloneSvg.setAttribute('width', `${Math.ceil(safeWidth)}`);
+    cloneSvg.setAttribute('height', `${Math.ceil(safeHeight)}`);
+
+    return {
+      svgText: serializer.serializeToString(cloneSvg),
+      width: Math.ceil(safeWidth),
+      height: Math.ceil(safeHeight),
+    };
+  } finally {
+    highlighted.forEach((el) => applyHighlight(el, true));
   }
-  keepSet.add(svgRoot);
-
-  targetEl.querySelectorAll('*').forEach((node) => keepSet.add(node));
-  keepSet.forEach((node) => {
-    if (node instanceof Element && node !== svgRoot){
-      node.setAttribute('data-export-keep', '1');
-    }
-  });
-
-  const rawBBox = getTransformedBBoxRoot(targetEl);
-  const strokeWidth = getStrokeWidthRoot(targetEl);
-  const bbox = expandBBox(rawBBox, strokeWidth);
-  const pad = 2;
-
-  const serializer = new XMLSerializer();
-  const cloneDoc = new DOMParser().parseFromString(serializer.serializeToString(svgRoot), 'image/svg+xml');
-
-  targetEl.removeAttribute('data-export-target');
-  keepSet.forEach((node) => {
-    if (node instanceof Element) node.removeAttribute('data-export-keep');
-  });
-
-  const cloneSvg = cloneDoc.querySelector('svg');
-  if (!cloneSvg) return null;
-
-  cloneSvg.querySelectorAll('*').forEach((node) => {
-    if (!(node instanceof SVGElement)) return;
-    const keep = node.getAttribute('data-export-keep') === '1';
-    if (!keep && node instanceof SVGGraphicsElement){
-      node.setAttribute('visibility', 'hidden');
-    }
-    node.removeAttribute('data-export-keep');
-    node.removeAttribute('data-export-target');
-  });
-
-  const safeWidth = Math.max(1, bbox.width + pad * 2);
-  const safeHeight = Math.max(1, bbox.height + pad * 2);
-  const minX = bbox.left - pad;
-  const minY = bbox.top - pad;
-
-  cloneSvg.setAttribute('viewBox', `${minX} ${minY} ${safeWidth} ${safeHeight}`);
-  cloneSvg.setAttribute('width', `${Math.ceil(safeWidth)}`);
-  cloneSvg.setAttribute('height', `${Math.ceil(safeHeight)}`);
-
-  return {
-    svgText: serializer.serializeToString(cloneSvg),
-    width: Math.ceil(safeWidth),
-    height: Math.ceil(safeHeight),
-  };
 }
 
 function downloadBlob(blob, fileName){
