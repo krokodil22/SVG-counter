@@ -490,6 +490,30 @@ function normalizeColor(val){
   return v;
 }
 
+function toHexByte(n){
+  const clamped = Math.max(0, Math.min(255, n));
+  return Math.round(clamped).toString(16).padStart(2, '0').toUpperCase();
+}
+
+function colorToHex(val){
+  const normalized = normalizeColor(val);
+  if (!normalized) return null;
+
+  const probe = document.createElement('span');
+  probe.style.color = normalized;
+  document.body.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  probe.remove();
+
+  const m = resolved.match(/rgba?\(([^)]+)\)/i);
+  if (!m) return null;
+
+  const channels = m[1].split(',').map((s) => Number.parseFloat(s.trim()));
+  if (channels.length < 3 || channels.some((n) => !Number.isFinite(n))) return null;
+
+  return `#${toHexByte(channels[0])}${toHexByte(channels[1])}${toHexByte(channels[2])}`;
+}
+
 function resetColorsUI(){
   fillText.textContent = '—';
   strokeText.textContent = '—';
@@ -512,10 +536,13 @@ function updateColorsUI(){
   const fill = saved?.realFill ?? 'none';
   const stroke = saved?.realStroke ?? 'none';
 
-  fillText.textContent = fill;
-  strokeText.textContent = stroke;
-  fillText.classList.remove('muted');
-  strokeText.classList.remove('muted');
+  const fillHex = colorToHex(fill);
+  const strokeHex = colorToHex(stroke);
+
+  fillText.textContent = fillHex ?? '—';
+  strokeText.textContent = strokeHex ?? '—';
+  fillText.classList.toggle('muted', !fillHex);
+  strokeText.classList.toggle('muted', !strokeHex);
 
   const f = normalizeColor(fill);
   const s = normalizeColor(stroke);
