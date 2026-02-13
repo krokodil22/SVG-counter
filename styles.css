@@ -218,6 +218,18 @@ body{
 }
 .row:last-child{ border-bottom: 0; }
 
+.export-actions{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.export-actions .btn[disabled]{
+  opacity: .55;
+  cursor: not-allowed;
+}
+
 .label{ color: var(--muted); font-size: 12px; }
 .value{ font-weight: 700; }
 .muted{ color: var(--muted); font-weight: 600; }
