@@ -3,17 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SVG Measure — измерение элементов</title>
+  <title>Tetrika SVG Measure — измерение элементов</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="site-header">
-    <div class="brand">
-      <div class="logo" aria-hidden="true">⟂</div>
-      <div>
-        <div class="title">SVG Measure</div>
-        <div class="subtitle">Выделяйте элементы — размеры и расстояния рисуются прямо на холсте (1:1, без учёта stroke)</div>
-      </div>
+    <div class="brand" aria-label="Логотип Tetrika">
+      <div class="logo" role="img" aria-label="Tetrika"></div>
+      <div class="title">Tetrika</div>
     </div>
 
     <div class="controls">
@@ -72,17 +69,9 @@
             <span id="strokeWidthText" class="muted">—</span>
           </div>
         </div>
-
-        <div class="note">
-          Подсветка не влияет на показанные цвета: берётся «реальный» fill/stroke до выделения.
-        </div>
       </div>
     </aside>
   </main>
-
-  <footer class="site-footer">
-    <span>Статичный сайт. Ничего не отправляется на сервер.</span>
-  </footer>
 
   <script src="app.js"></script>
 </body>
