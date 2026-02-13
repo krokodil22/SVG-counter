@@ -125,10 +125,8 @@ function hookSelection(){
     const target = e.target;
     if (!(target instanceof SVGElement)) return;
     if (target === svgRoot) return;
-    if (typeof target.getBBox !== 'function') return;
-    if (!canMeasureBBox(target)) return;
-
-    const el = /** @type {SVGGraphicsElement} */ (target);
+    const el = resolveSelectableElement(target);
+    if (!el) return;
 
     const multi = e.ctrlKey || e.metaKey || e.shiftKey;
     if (!multi){
@@ -141,6 +139,23 @@ function hookSelection(){
 
     updateAll();
   }, { passive: true });
+}
+
+function resolveSelectableElement(target){
+  /** @type {SVGElement | null} */
+  let node = target;
+
+  while (node && node !== svgRoot){
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'text' && typeof node.getBBox === 'function' && canMeasureBBox(node)){
+      return /** @type {SVGGraphicsElement} */ (node);
+    }
+    node = node.parentElement;
+  }
+
+  if (typeof target.getBBox !== 'function') return null;
+  if (!canMeasureBBox(target)) return null;
+  return /** @type {SVGGraphicsElement} */ (target);
 }
 
 function addToSelection(el){
@@ -169,6 +184,7 @@ document.addEventListener('keydown', (e) => {
 /* -------------------- Подсветка и реальные стили -------------------- */
 
 function applyHighlight(el, on){
+  const isText = el.tagName.toLowerCase() === 'text';
   if (on){
     if (!restoreMap.has(el)){
       const cs = getComputedStyle(el);
@@ -182,15 +198,18 @@ function applyHighlight(el, on){
       });
     }
     el.classList.add('svg-selected');
-    // Подсветка: меняем только цвет обводки, НЕ трогаем толщину (чтобы не путать измерения/панель)
-    el.setAttribute('stroke', '#F4A12D');
+    // Для текста не меняем stroke (иначе обводятся глифы по отдельности).
+    if (!isText){
+      // Подсветка: меняем только цвет обводки, НЕ трогаем толщину (чтобы не путать измерения/панель)
+      el.setAttribute('stroke', '#F4A12D');
+    }
   } else {
     const prev = restoreMap.get(el);
     el.classList.remove('svg-selected');
-    if (prev){
+    if (prev && !isText){
       setOrRemove(el, 'stroke', prev.strokeAttr);
       // stroke-width не меняли — восстанавливать не нужно
-    } else {
+    } else if (!isText){
       el.removeAttribute('stroke');
     }
   }
@@ -424,6 +443,21 @@ function addOffsetsToEdges(bGeom){
   addLineSvg(xMid, vb.minY, xMid, bGeom.top, fmtPx(topOffset));
 }
 
+function addSelectionBox(bGeom){
+  const c1 = svgToClient(bGeom.left, bGeom.top);
+  const c2 = svgToClient(bGeom.right, bGeom.bottom);
+  const p1 = clientToOverlay(c1.x, c1.y);
+  const p2 = clientToOverlay(c2.x, c2.y);
+
+  const box = document.createElement('div');
+  box.className = 'selection-box';
+  box.style.left = `${Math.min(p1.x, p2.x)}px`;
+  box.style.top = `${Math.min(p1.y, p2.y)}px`;
+  box.style.width = `${Math.abs(p2.x - p1.x)}px`;
+  box.style.height = `${Math.abs(p2.y - p1.y)}px`;
+  overlay.appendChild(box);
+}
+
 function addPairDistance(b1, b2){
   const b1ContainsB2 = b1.left <= b2.left && b1.right >= b2.right && b1.top <= b2.top && b1.bottom >= b2.bottom;
   const b2ContainsB1 = b2.left <= b1.left && b2.right >= b1.right && b2.top <= b1.top && b2.bottom >= b1.bottom;
@@ -569,6 +603,7 @@ function updateAll(){
     const sw = getStrokeWidthRoot(selected[0]);
     // В соответствии с запросом: вычитаем толщину обводки из размера, и считаем всё по "итоговому" прямоугольнику
     const b = adjustRectByStroke(bRaw, sw);
+    addSelectionBox(b);
     addSizeLabel(b);
     addOffsetsToEdges(b);
   }
