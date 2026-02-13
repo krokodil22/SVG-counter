@@ -695,6 +695,14 @@ function blobToDataUrl(blob){
   });
 }
 
+function toAbsoluteUrl(href){
+  try{
+    return new URL(href, window.location.href).href;
+  }catch(_){
+    return href;
+  }
+}
+
 async function inlineSvgImages(svgText){
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   const svg = doc.querySelector('svg');
@@ -702,11 +710,15 @@ async function inlineSvgImages(svgText){
 
   const images = Array.from(svg.querySelectorAll('image'));
   await Promise.all(images.map(async (imgEl) => {
-    const href = imgEl.getAttribute('href') || imgEl.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
-    if (!href || href.startsWith('data:') || href.startsWith('blob:') || href.startsWith('#')) return;
+    const rawHref = imgEl.getAttribute('href') || imgEl.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    if (!rawHref || rawHref.startsWith('data:') || rawHref.startsWith('blob:') || rawHref.startsWith('#')) return;
+
+    const absoluteHref = toAbsoluteUrl(rawHref);
+    imgEl.setAttribute('href', absoluteHref);
+    imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', absoluteHref);
 
     try{
-      const res = await fetch(href, { mode: 'cors' });
+      const res = await fetch(absoluteHref, { mode: 'cors' });
       if (!res.ok) return;
       const blob = await res.blob();
       const dataUrl = await blobToDataUrl(blob);
@@ -714,7 +726,8 @@ async function inlineSvgImages(svgText){
       imgEl.setAttribute('href', dataUrl);
       imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', dataUrl);
     }catch(_){
-      // Если ресурс недоступен по CORS, оставляем исходный href.
+      // Если ресурс недоступен по CORS, оставляем абсолютный href,
+      // чтобы изображения не терялись в скачанном SVG.
     }
   }));
 
