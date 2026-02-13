@@ -624,6 +624,8 @@ function getExportPayload(targetEl){
     keepSet.add(svgRoot);
 
     targetEl.querySelectorAll('*').forEach((node) => keepSet.add(node));
+    expandKeepSetWithDefinitions(keepSet);
+
     keepSet.forEach((node) => {
       if (node instanceof Element && node !== svgRoot){
         node.setAttribute('data-export-keep', '1');
@@ -693,6 +695,69 @@ function blobToDataUrl(blob){
     reader.onerror = () => reject(new Error('read blob error'));
     reader.readAsDataURL(blob);
   });
+}
+
+function collectReferencedIds(node){
+  if (!(node instanceof Element)) return [];
+
+  const refs = new Set();
+  const attrs = Array.from(node.attributes || []);
+
+  attrs.forEach((attr) => {
+    const value = attr.value || '';
+    const urlMatches = value.matchAll(/url\(\s*['"]?#([^'"\s)]+)['"]?\s*\)/g);
+    for (const match of urlMatches){
+      if (match[1]) refs.add(match[1]);
+    }
+
+    if ((attr.name === 'href' || attr.name.endsWith(':href')) && value.startsWith('#')){
+      refs.add(value.slice(1));
+    }
+  });
+
+  return Array.from(refs);
+}
+
+function expandKeepSetWithDefinitions(keepSet){
+  if (!svgRoot) return;
+
+  const idMap = new Map();
+  svgRoot.querySelectorAll('[id]').forEach((el) => {
+    const id = el.getAttribute('id');
+    if (id) idMap.set(id, el);
+  });
+
+  const queue = Array.from(keepSet);
+  const seen = new Set();
+
+  while (queue.length){
+    const node = queue.shift();
+    if (!(node instanceof Element)) continue;
+    if (seen.has(node)) continue;
+    seen.add(node);
+
+    const refIds = collectReferencedIds(node);
+    refIds.forEach((id) => {
+      const refEl = idMap.get(id);
+      if (!refEl) return;
+
+      let current = refEl;
+      while (current && current !== svgRoot){
+        if (!keepSet.has(current)){
+          keepSet.add(current);
+          queue.push(current);
+        }
+        current = current.parentElement;
+      }
+
+      refEl.querySelectorAll('*').forEach((child) => {
+        if (!keepSet.has(child)){
+          keepSet.add(child);
+          queue.push(child);
+        }
+      });
+    });
+  }
 }
 
 function toAbsoluteUrl(href){
