@@ -129,7 +129,8 @@ body{
   min-height: 420px;
   max-height: 78vh;
   padding: 12px;
-  overflow: hidden; /* без горизонтального скролла */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .svg-host svg{
@@ -137,14 +138,13 @@ body{
   background: #fff;
   border-radius: 12px;
   border: 1px solid var(--line);
-  width: 100%;
-  height: 100%;
 }
 
 /* слой измерений поверх SVG */
 .overlay{
   position: absolute;
-  inset: 12px; /* совпадает с padding svg-host */
+  left: 12px;
+  top: 12px;
   pointer-events: none;
 }
 
