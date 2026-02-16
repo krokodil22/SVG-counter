@@ -14,6 +14,7 @@ const downloadPngBtn = document.getElementById('downloadPngBtn');
 const dropZone = document.getElementById('dropZone');
 const svgHost = document.getElementById('svgHost');
 const overlay = document.getElementById('overlay');
+const HOST_INSET = 12;
 
 const fillText = document.getElementById('fillText');
 const strokeText = document.getElementById('strokeText');
@@ -91,13 +92,9 @@ async function loadSvgFile(file){
     imported.setAttribute('viewBox', `0 0 ${intrinsic.width} ${intrinsic.height}`);
   }
 
-  // Визуально подгоняем под размер окна (100%), но координаты остаются исходными
-  imported.setAttribute('width', '100%');
-  imported.setAttribute('height', '100%');
-  imported.style.width = '100%';
-  imported.style.height = '100%';
-  imported.style.maxWidth = '100%';
-  imported.style.maxHeight = '100%';
+  // Размеры в SVG units остаются исходными, а визуальный размер выставляем отдельно в applyFitToHost.
+  imported.setAttribute('width', `${intrinsic.width}`);
+  imported.setAttribute('height', `${intrinsic.height}`);
   imported.style.transform = '';
 
   svgHost.insertBefore(imported, overlay);
@@ -118,12 +115,23 @@ function updateHintVisibility(){
 
 function applyFitToHost(){
   if (!svgRoot) return;
-  // SVG должен масштабироваться визуально, но измерения остаются в исходных SVG units.
-  // Используем нативное масштабирование через viewBox + width/height 100%.
+  // Подгоняем SVG по ширине контейнера и оставляем вертикальный скролл.
+  // Измерения остаются в исходных SVG units через viewBox.
+  const availableWidth = Math.max(1, svgHost.clientWidth - HOST_INSET * 2);
+  const aspect = intrinsic.width > 0 ? (intrinsic.height / intrinsic.width) : 1;
+  const renderHeight = Math.max(1, availableWidth * aspect);
+
   svgRoot.setAttribute('preserveAspectRatio', 'xMinYMin meet');
-  svgRoot.setAttribute('width', '100%');
-  svgRoot.setAttribute('height', '100%');
+  svgRoot.style.width = `${availableWidth}px`;
+  svgRoot.style.height = `${renderHeight}px`;
+  svgRoot.style.maxWidth = 'none';
+  svgRoot.style.maxHeight = 'none';
   svgRoot.style.transform = '';
+
+  overlay.style.left = `${HOST_INSET}px`;
+  overlay.style.top = `${HOST_INSET}px`;
+  overlay.style.width = `${availableWidth}px`;
+  overlay.style.height = `${renderHeight}px`;
 }
 
 /* -------------------- Выделение -------------------- */
@@ -375,10 +383,9 @@ function svgToClient(x, y){
 
 function clientToOverlay(xClient, yClient){
   const hostRect = svgHost.getBoundingClientRect();
-  const inset = 12;
   return {
-    x: xClient - hostRect.left - inset + svgHost.scrollLeft,
-    y: yClient - hostRect.top - inset + svgHost.scrollTop
+    x: xClient - hostRect.left - HOST_INSET + svgHost.scrollLeft,
+    y: yClient - hostRect.top - HOST_INSET + svgHost.scrollTop
   };
 }
 
