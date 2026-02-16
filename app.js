@@ -143,7 +143,7 @@ function hookSelection(){
     const target = e.target;
     if (!(target instanceof SVGElement)) return;
     if (target === svgRoot) return;
-    const el = resolveSelectableElement(target);
+    const el = resolveSelectableElement(target, e);
     if (!el) return;
 
     const multi = e.ctrlKey || e.metaKey || e.shiftKey;
@@ -159,21 +159,56 @@ function hookSelection(){
   }, { passive: true });
 }
 
-function resolveSelectableElement(target){
+function resolveSelectableElement(target, clickEvent){
   /** @type {SVGElement | null} */
   let node = target;
+  let base = null;
 
   while (node && node !== svgRoot){
-    const tag = node.tagName.toLowerCase();
-    if (tag === 'text' && typeof node.getBBox === 'function' && canMeasureBBox(node)){
-      return /** @type {SVGGraphicsElement} */ (node);
+    if (typeof node.getBBox === 'function' && canMeasureBBox(node)){
+      base = /** @type {SVGGraphicsElement} */ (node);
+      break;
     }
     node = node.parentElement;
   }
 
-  if (typeof target.getBBox !== 'function') return null;
-  if (!canMeasureBBox(target)) return null;
-  return /** @type {SVGGraphicsElement} */ (target);
+  if (!base) return null;
+  if (getStrokeWidthRoot(base) > 0) return base;
+
+  const outlinedSibling = findOutlinedSibling(base, clickEvent);
+  return outlinedSibling || base;
+}
+
+function findOutlinedSibling(base, clickEvent){
+  const parent = base.parentElement;
+  if (!parent || !svgRoot) return null;
+
+  const point = clientToSvgRoot(clickEvent.clientX, clickEvent.clientY);
+  if (!point) return null;
+
+  let best = null;
+  let bestArea = Infinity;
+
+  Array.from(parent.children).forEach((child) => {
+    if (!(child instanceof SVGGraphicsElement)) return;
+    if (child === base) return;
+    if (!canMeasureBBox(child)) return;
+
+    const strokeW = getStrokeWidthRoot(child);
+    if (strokeW <= 0) return;
+
+    const outer = expandBBox(getTransformedBBoxRoot(child), strokeW);
+    const containsPoint = point.x >= outer.left && point.x <= outer.right && point.y >= outer.top && point.y <= outer.bottom;
+    if (!containsPoint) return;
+
+    const area = outer.width * outer.height;
+    if (area < bestArea){
+      best = child;
+      bestArea = area;
+    }
+  });
+
+  return best;
 }
 
 function addToSelection(el){
@@ -379,6 +414,24 @@ function svgToClient(x, y){
   if (!m) return { x: 0, y: 0 };
   const p2 = pt.matrixTransform(m);
   return { x: p2.x, y: p2.y };
+}
+
+function clientToSvgRoot(xClient, yClient){
+  if (!svgRoot) return null;
+  const m = svgRoot.getScreenCTM();
+  if (!m) return null;
+
+  let inv;
+  try{
+    inv = m.inverse();
+  }catch(_){
+    return null;
+  }
+
+  const pt = svgRoot.createSVGPoint();
+  pt.x = xClient;
+  pt.y = yClient;
+  return pt.matrixTransform(inv);
 }
 
 function clientToOverlay(xClient, yClient){
