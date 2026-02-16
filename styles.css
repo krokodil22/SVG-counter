@@ -14,6 +14,7 @@
 html, body{ height: 100%; }
 body{
   margin: 0;
+  overflow-x: hidden;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
   color: var(--ink);
   background: radial-gradient(900px 500px at 18% -10%, rgba(229, 86, 180, .2), transparent 62%),
@@ -82,15 +83,23 @@ body{
 
 .layout{
   display: grid;
-  grid-template-columns: 1fr 260px;
+  grid-template-columns: minmax(0, 74vw) minmax(220px, 24vw);
   gap: 16px;
+  width: 100%;
   padding: 16px;
-  max-width: 1280px;
   margin: 0 auto;
+}
+
+.stage{
+  min-width: 0;
 }
 
 @media (max-width: 980px){
   .layout{ grid-template-columns: 1fr; }
+  .drop-zone{
+    height: calc(100vh - 180px);
+    max-height: calc(100vh - 180px);
+  }
 }
 
 .drop-zone{
@@ -100,7 +109,9 @@ body{
   background: rgba(255,255,255,.85);
   box-shadow: var(--shadow);
   overflow: hidden;
-  min-height: 72vh;
+  height: calc(100vh - 128px);
+  min-height: 420px;
+  max-height: calc(100vh - 128px);
 }
 
 .drop-zone:focus{
@@ -124,10 +135,7 @@ body{
 .svg-host{
   position: relative;
   width: 100%;
-  /* окно подстраивается под экран */
-  height: calc(100vh - 140px);
-  min-height: 420px;
-  max-height: 78vh;
+  height: 100%;
   padding: 12px;
   overflow-x: hidden;
   overflow-y: auto;
