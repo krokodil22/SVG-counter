@@ -606,24 +606,54 @@ function updateExportButtons(){
   if (downloadPngBtn) downloadPngBtn.disabled = !enabled;
 }
 
-function getExportPayload(targetEl){
-  if (!svgRoot || !targetEl) return null;
+function mergeBBoxes(boxes){
+  if (!boxes.length) return null;
+
+  const left = Math.min(...boxes.map((box) => box.left));
+  const top = Math.min(...boxes.map((box) => box.top));
+  const right = Math.max(...boxes.map((box) => box.right));
+  const bottom = Math.max(...boxes.map((box) => box.bottom));
+
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function getExportPayload(targetEls){
+  if (!svgRoot) return null;
+
+  const targets = Array.from(new Set((targetEls || []).filter(Boolean)));
+  if (!targets.length) return null;
 
   const highlighted = selected.filter((el) => restoreMap.has(el));
   highlighted.forEach((el) => applyHighlight(el, false));
 
   try{
-    targetEl.setAttribute('data-export-target', '1');
     const keepSet = new Set();
+    const rawBBoxes = [];
 
-    let parent = targetEl;
-    while (parent && parent !== svgRoot){
-      keepSet.add(parent);
-      parent = parent.parentElement;
-    }
+    targets.forEach((targetEl) => {
+      targetEl.setAttribute('data-export-target', '1');
+
+      let parent = targetEl;
+      while (parent && parent !== svgRoot){
+        keepSet.add(parent);
+        parent = parent.parentElement;
+      }
+
+      targetEl.querySelectorAll('*').forEach((node) => keepSet.add(node));
+
+      const rawBBox = getTransformedBBoxRoot(targetEl);
+      const strokeWidth = getStrokeWidthRoot(targetEl);
+      rawBBoxes.push(expandBBox(rawBBox, strokeWidth));
+    });
+
     keepSet.add(svgRoot);
-
-    targetEl.querySelectorAll('*').forEach((node) => keepSet.add(node));
     expandKeepSetWithDefinitions(keepSet);
 
     keepSet.forEach((node) => {
@@ -632,15 +662,14 @@ function getExportPayload(targetEl){
       }
     });
 
-    const rawBBox = getTransformedBBoxRoot(targetEl);
-    const strokeWidth = getStrokeWidthRoot(targetEl);
-    const bbox = expandBBox(rawBBox, strokeWidth);
+    const bbox = mergeBBoxes(rawBBoxes);
+    if (!bbox) return null;
     const pad = 2;
 
     const serializer = new XMLSerializer();
     const cloneDoc = new DOMParser().parseFromString(serializer.serializeToString(svgRoot), 'image/svg+xml');
 
-    targetEl.removeAttribute('data-export-target');
+    targets.forEach((targetEl) => targetEl.removeAttribute('data-export-target'));
     keepSet.forEach((node) => {
       if (node instanceof Element) node.removeAttribute('data-export-keep');
     });
@@ -800,19 +829,20 @@ async function inlineSvgImages(svgText){
 }
 
 async function exportSelected(type){
-  const target = selected[0];
-  if (!target || !svgRoot) return;
+  const targets = selected.filter(Boolean);
+  if (!targets.length || !svgRoot) return;
 
-  const payload = getExportPayload(target);
+  const payload = getExportPayload(targets);
   if (!payload){
     alert('Не удалось подготовить экспорт.');
     return;
   }
 
   const preparedSvgText = await inlineSvgImages(payload.svgText);
+  const fileBase = targets.length > 1 ? 'selected-elements' : 'selected-element';
 
   if (type === 'svg'){
-    downloadBlob(new Blob([preparedSvgText], { type: 'image/svg+xml;charset=utf-8' }), 'selected-element.svg');
+    downloadBlob(new Blob([preparedSvgText], { type: 'image/svg+xml;charset=utf-8' }), `${fileBase}.svg`);
     return;
   }
 
@@ -839,7 +869,7 @@ async function exportSelected(type){
     const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!pngBlob) throw new Error('png conversion error');
 
-    downloadBlob(pngBlob, 'selected-element.png');
+    downloadBlob(pngBlob, `${fileBase}.png`);
   }catch(_){
     alert('Не удалось экспортировать PNG. Попробуйте скачать SVG.');
   }finally{
